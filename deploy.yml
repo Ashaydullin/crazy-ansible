@@ -1,0 +1,85 @@
+--- 
+
+- name: LEPJ stack (Linux Nginx PGSQL Java) 
+  hosts: all
+  become: yes
+
+  vars:
+    jvm_version: "11"
+    nginx_version: "1.21.1"
+    postgresql_version: "13"
+    dbname: your_database_name
+    dbuser: your_username
+    dbpassword: your_password
+
+  tasks:
+    
+    - name: Update 
+      apt:
+        update_cache: yes
+        force_apt_get: yes
+        cache_valid_time: 3600
+
+    - name: install packages
+      apt:
+        name:
+          - "openjdk-{{ jvm_version }}-jdk
+          - "nginx={{ nginx_version }}"
+          - git
+          - "postgresql-{{ postgresql_version }}"
+          - "postgresql-server-dev-{{ postgres_version }}"
+          - libpq-dev
+        state: present
+
+    - name: Copy Nginx Configure
+      copy:
+        src: "files/nginx.conf"
+        dest: "/etc/nginx/nginx.conf"
+        mode: "0640"
+
+    - name: Add Nginx statics
+      copy: 
+        src: "files/"
+        dest: "files/www/"
+        mode: "0640"
+      notify:
+        - Nginx Reload
+
+    - name: configure PostgreSQL
+      template:
+        src: "files/postgresql.conf"
+        dest: /etc/postgresql/{{ postgres_version }}/main/postgresql.conf
+        mode: "0640"
+        owner: postgres
+        group: postgres
+
+     - name: Create database
+      postgresql_db:
+        name: "{{ dbname }}"
+        state: present
+
+      - name: Create database user
+        postgresql_user:
+          name: "{{ dbuser }}"
+          password: "{{ dbpassword }}"
+          state: present
+
+      - name: Add user privileges in {{ dbname }}
+        postgresql_privs:
+          db: "{{ dbname }}"
+          user: "{{ dbuser }}"
+          privs: ALL
+          state: present
+        notify:
+          - PostgreSQL
+
+  handlers:
+    - name: Nginx Reload
+      systemd:
+        name: nginx
+        state: reload
+      
+    - name: PostgreSQL
+      systemd:
+        name: postgresql
+        state: restarted
